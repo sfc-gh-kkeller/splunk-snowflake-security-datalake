@@ -1,0 +1,49 @@
+# OS
+.DS_Store
+Thumbs.db
+._*
+
+# Credentials / Secrets
+.env
+*.env
+config/credentials.toml
+vector-ingestion-demo/config/credentials.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Pixi
+.pixi/
+
+# PostgreSQL data
+vector-ingestion-demo/data/postgres/
+vector-ingestion-demo/data/vector/
+
+# Generated logs (large, recreatable)
+vector-ingestion-demo/logs/*.json
+vector-ingestion-demo/logs/*.log
+vector-ingestion-demo/logs/*.csv
+vector-ingestion-demo/output/
+
+# Pixi lock (platform-specific)
+vector-ingestion-demo/pixi.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Temp
+*.tmp
+*.bak

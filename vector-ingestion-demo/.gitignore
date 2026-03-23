@@ -1,0 +1,38 @@
+# Credentials (never commit!)
+config/credentials.toml
+.env
+*.env
+
+# Logs (generated)
+logs/*.json
+logs/*.log
+
+# Vector data/state
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# Pixi
+.pixi/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*.tmp
+*.bak
+

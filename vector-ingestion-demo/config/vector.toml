@@ -1,0 +1,203 @@
+# ============================================================
+# Vector Configuration for Splunk/Snowflake Demo
+# ============================================================
+#
+# Routing Strategy:
+#   - Nginx logs (CRITICAL) → Snowflake + Splunk
+#   - PostgreSQL logs       → Snowflake only (not critical)
+#
+# Usage:
+#   pixi run vector-validate   # Validate config
+#   pixi run vector-run        # Run Vector
+# ============================================================
+
+# Data directory for Vector state
+data_dir = "./data/vector"
+
+# ============================================================
+# SOURCES
+# ============================================================
+
+# Source: Nginx access logs (JSON format from generator)
+[sources.nginx_logs]
+type = "file"
+include = ["./logs/nginx_access_*.json"]
+read_from = "beginning"
+fingerprint.strategy = "checksum"
+
+# Source: PostgreSQL logs (JSON format from generator)
+[sources.postgres_logs]
+type = "file"
+include = ["./logs/postgresql_*.json"]
+read_from = "beginning"
+fingerprint.strategy = "checksum"
+
+# Source: Real PostgreSQL CSV logs (if pg is running)
+[sources.postgres_csv_logs]
+type = "file"
+include = ["./logs/postgresql-*.csv"]
+read_from = "beginning"
+fingerprint.strategy = "checksum"
+
+# ============================================================
+# TRANSFORMS
+# ============================================================
+
+# Parse Nginx JSON logs
+[transforms.parse_nginx]
+type = "remap"
+inputs = ["nginx_logs"]
+source = '''
+. = parse_json!(string!(.message))
+.source_system = "nginx"
+.log_type = "access"
+.ingested_at = now()
+
+# Mark critical events for Splunk routing
+.route_to_splunk = true
+'''
+
+# Parse PostgreSQL JSON logs
+[transforms.parse_postgres]
+type = "remap"
+inputs = ["postgres_logs"]
+source = '''
+. = parse_json!(string!(.message))
+.source_system = "postgresql"
+.log_type = "query"
+.ingested_at = now()
+
+# PostgreSQL logs go to Snowflake only (not critical for real-time)
+.route_to_splunk = false
+'''
+
+# Parse PostgreSQL CSV logs (from real pg instance)
+[transforms.parse_postgres_csv]
+type = "remap"
+inputs = ["postgres_csv_logs"]
+source = '''
+# PostgreSQL CSV format parsing
+parts = split(string!(.message), ",")
+
+.log_time = get(parts, [0]) ?? ""
+.user_name = get(parts, [1]) ?? ""
+.database_name = get(parts, [2]) ?? ""
+.process_id = get(parts, [3]) ?? ""
+.connection_from = get(parts, [4]) ?? ""
+.session_id = get(parts, [5]) ?? ""
+.session_line_num = get(parts, [6]) ?? ""
+.command_tag = get(parts, [7]) ?? ""
+.error_severity = get(parts, [11]) ?? ""
+.message = get(parts, [13]) ?? ""
+.query = get(parts, [18]) ?? ""
+.application_name = get(parts, [22]) ?? ""
+
+.source_system = "postgresql"
+.log_type = "query"
+.ingested_at = now()
+.route_to_splunk = false
+
+# Detect suspicious patterns
+query_lower = downcase(.query ?? "")
+.is_suspicious = contains(query_lower, "union") ||
+                 contains(query_lower, "drop table") ||
+                 contains(query_lower, "password") ||
+                 contains(query_lower, "information_schema") ||
+                 contains(query_lower, "pg_read_file")
+'''
+
+# Enrich Nginx logs with threat detection
+[transforms.enrich_nginx]
+type = "remap"
+inputs = ["parse_nginx"]
+source = '''
+# Add severity based on attack type
+if .is_attack == true {
+    if .attack_type == "sql_injection" || .attack_type == "command_injection" {
+        .enriched_severity = "critical"
+    } else if .attack_type == "brute_force" || .attack_type == "xss" {
+        .enriched_severity = "high"
+    } else {
+        .enriched_severity = "medium"
+    }
+} else {
+    .enriched_severity = "info"
+}
+
+# Add geo placeholder (would use GeoIP in production)
+.geo_country = "unknown"
+'''
+
+# Filter: Only attack/suspicious events for Splunk (reduce volume)
+[transforms.filter_for_splunk]
+type = "filter"
+inputs = ["enrich_nginx"]
+condition = '.is_attack == true || .http_status >= 400'
+
+# ============================================================
+# SINKS - SNOWFLAKE (via HTTP/webhook or file for manual upload)
+# ============================================================
+
+# Sink: Nginx logs to file (for Snowflake CSV upload)
+[sinks.snowflake_nginx_file]
+type = "file"
+inputs = ["enrich_nginx"]
+path = "./output/snowflake/nginx_%Y%m%d.json"
+encoding.codec = "json"
+
+# Sink: PostgreSQL logs to file (for Snowflake CSV upload)
+[sinks.snowflake_postgres_file]
+type = "file"
+inputs = ["parse_postgres", "parse_postgres_csv"]
+path = "./output/snowflake/postgres_%Y%m%d.json"
+encoding.codec = "json"
+
+# ============================================================
+# SINKS - SPLUNK HEC (Nginx only - critical events)
+# ============================================================
+
+# Sink: Splunk HEC (Nginx attack logs only)
+# Uncomment and configure when Splunk credentials are available
+#
+# [sinks.splunk_hec]
+# type = "splunk_hec_logs"
+# inputs = ["filter_for_splunk"]
+# endpoint = "${SPLUNK_HEC_URL}"
+# token = "${SPLUNK_HEC_TOKEN}"
+# index = "security_logs"
+# source = "nginx"
+# sourcetype = "nginx:accesslog:json"
+# compression = "gzip"
+# 
+# [sinks.splunk_hec.encoding]
+# codec = "json"
+
+# Sink: Splunk HEC file output (for testing without Splunk)
+[sinks.splunk_nginx_file]
+type = "file"
+inputs = ["filter_for_splunk"]
+path = "./output/splunk/nginx_attacks_%Y%m%d.json"
+encoding.codec = "json"
+
+# ============================================================
+# CONSOLE OUTPUT (for debugging)
+# ============================================================
+
+# Uncomment to see logs in console
+# [sinks.console_debug]
+# type = "console"
+# inputs = ["enrich_nginx", "parse_postgres"]
+# encoding.codec = "json"
+
+# ============================================================
+# METRICS
+# ============================================================
+
+# Internal metrics for monitoring Vector
+[sources.internal_metrics]
+type = "internal_metrics"
+
+[sinks.prometheus]
+type = "prometheus_exporter"
+inputs = ["internal_metrics"]
+address = "0.0.0.0:9598"
