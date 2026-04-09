@@ -74,6 +74,33 @@ vector-ingestion-demo/
 └── env.example                  # Environment variable template
 ```
 
+### Demo Data & Setup
+
+The `data/demo/` directory contains everything needed to recreate the Snowflake tables used by the Splunk federated query demos:
+
+| File | Rows | Description |
+|------|------|-------------|
+| [`data/demo/setup_workbook.sql`](data/demo/setup_workbook.sql) | — | Full SQL workbook: DDL, staging, COPY INTO, verification queries |
+| `data/demo/access_logs.csv` | 100,000 | Web access logs with realistic attack patterns |
+| `data/demo/asset_inventory.csv` | 844 | Server/resource catalog (OS, specs, cloud provider) |
+| `data/demo/vulnerabilities.csv` | 15,000 | Vulnerability scan results with severity and status |
+| `data/demo/security_findings.csv` | 106 | Security findings derived from access log anomalies |
+
+**Quick setup:**
+
+```bash
+# 1. Run the SQL workbook to create tables and file format
+snow sql -f data/demo/setup_workbook.sql -c your_connection
+
+# 2. Upload CSVs to the Snowflake stage
+snow stage copy data/demo/access_logs.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/access_logs -c your_connection
+snow stage copy data/demo/asset_inventory.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/asset_inventory -c your_connection
+snow stage copy data/demo/vulnerabilities.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/vulnerabilities -c your_connection
+snow stage copy data/demo/security_findings.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/security_findings -c your_connection
+
+# 3. Load data (run the COPY INTO section from the workbook)
+```
+
 ### Sample Data
 
 | File | Description |
@@ -99,21 +126,24 @@ This creates CSV/JSON files in `vector-ingestion-demo/logs/` with simulated:
 - **Nginx attacks**: SQL injection, XSS, path traversal, command injection, brute force, recon
 - **PostgreSQL attacks**: Privilege escalation, data exfiltration, timing attacks
 
-### 2. Set Up Snowflake Tables
+### 2. Load Demo Data (Pre-built Dataset)
+
+Use the pre-built demo dataset for immediate Splunk federated query demos:
 
 ```bash
-# Via Snow CLI
-snow sql -f vector-ingestion-demo/config/snowflake_setup.sql
+# Run the setup workbook (creates DB, tables, stage)
+snow sql -f data/demo/setup_workbook.sql -c your_connection
 
-# Or paste config/snowflake_setup.sql into Snowflake Web UI
+# Upload CSVs and load — see data/demo/setup_workbook.sql for full instructions
 ```
 
-### 3. Upload to Snowflake
+### 3. Or: Generate Fresh Data + Upload
 
 ```bash
 cp vector-ingestion-demo/env.example vector-ingestion-demo/.env
 # Edit .env with your Snowflake credentials
 
+snow sql -f vector-ingestion-demo/config/snowflake_setup.sql
 pixi run upload-csv
 ```
 
