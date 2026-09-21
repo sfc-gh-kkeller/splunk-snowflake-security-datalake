@@ -14,6 +14,23 @@ import altair as alt
 st.set_page_config(page_title="Splunk + Snowflake Federated Search", layout="wide")
 
 # ---------------------------------------------------------------------------
+# Snowflake session — works in both legacy warehouse SiS and container runtime
+# ---------------------------------------------------------------------------
+try:
+    conn = st.connection("snowflake")
+    def run_query(sql):
+        start = time.time()
+        df = conn.query(sql)
+        return df, time.time() - start
+except AttributeError:
+    from snowflake.snowpark.context import get_active_session
+    _session = get_active_session()
+    def run_query(sql):
+        start = time.time()
+        df = _session.sql(sql).to_pandas()
+        return df, time.time() - start
+
+# ---------------------------------------------------------------------------
 # Dark theme CSS
 # ---------------------------------------------------------------------------
 st.markdown("""
@@ -41,10 +58,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Snowflake connection (SiS uses built-in "snowflake" connection)
-# ---------------------------------------------------------------------------
-conn = st.connection("snowflake")
+
 
 DEMO_QUERIES = {
     "Security Overview (Aggregation Pushdown)": {
@@ -98,13 +112,6 @@ DEMO_QUERIES = {
     },
 }
 
-
-def run_query(sql):
-    """Execute SQL against Snowflake. Returns (df, duration)."""
-    start = time.time()
-    df = conn.query(sql)
-    duration = time.time() - start
-    return df, duration
 
 
 def render_job_inspector(num_results, duration, rows_scanned):
