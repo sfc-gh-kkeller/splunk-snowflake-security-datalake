@@ -9,7 +9,7 @@ Simulates the Splunk DB Connect federated search experience.
 import time
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import altair as alt
 
 st.set_page_config(page_title="Splunk + Snowflake Federated Search", layout="wide")
 
@@ -177,13 +177,15 @@ with tab_dashboard:
     with col_pie:
         st.markdown('<div class="panel-header">Request Method Distribution</div>', unsafe_allow_html=True)
         df_pie, _ = run_query(DEMO_QUERIES["Request Method Distribution"]["sql"])
-        fig = px.pie(df_pie, names="REQUEST_METHOD", values="COUNT", hole=0.3)
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#C3CBD4", margin=dict(t=20, b=20, l=20, r=20), height=350,
-        )
-        fig.update_traces(marker=dict(colors=["#00C853", "#2196F3", "#FF9800", "#E91E63"]))
-        st.plotly_chart(fig, use_container_width=True)
+        pie_chart = alt.Chart(df_pie).mark_arc(innerRadius=50).encode(
+            theta=alt.Theta("COUNT:Q"),
+            color=alt.Color("REQUEST_METHOD:N", scale=alt.Scale(
+                domain=["DELETE", "PUT", "POST", "GET"],
+                range=["#00C853", "#2196F3", "#FF9800", "#E91E63"]
+            )),
+            tooltip=["REQUEST_METHOD", "COUNT"],
+        ).properties(height=350)
+        st.altair_chart(pie_chart, use_container_width=True)
 
     with col_bar:
         st.markdown('<div class="panel-header">Status Code Distribution</div>', unsafe_allow_html=True)
@@ -238,9 +240,12 @@ with tab_search:
             for i, col_name in enumerate(df.columns):
                 cols[i].metric(col_name.replace("_", " ").title(), f"{int(df.iloc[0][col_name]):,}")
         elif q["display"] == "pie":
-            fig = px.pie(df, names=df.columns[0], values=df.columns[1], hole=0.3)
-            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#C3CBD4", height=350)
-            st.plotly_chart(fig, use_container_width=True)
+            pie_chart = alt.Chart(df).mark_arc(innerRadius=50).encode(
+                theta=alt.Theta(f"{df.columns[1]}:Q"),
+                color=alt.Color(f"{df.columns[0]}:N"),
+                tooltip=[df.columns[0], df.columns[1]],
+            ).properties(height=350)
+            st.altair_chart(pie_chart, use_container_width=True)
         elif q["display"] == "bar":
             st.bar_chart(df.set_index(df.columns[0])[df.columns[1]])
         else:
