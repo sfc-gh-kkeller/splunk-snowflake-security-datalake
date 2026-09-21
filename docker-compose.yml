@@ -1,0 +1,44 @@
+services:
+  # Generate realistic security logs with attack patterns
+  log-generator:
+    build: ./vector-ingestion-demo
+    volumes:
+      - ./vector-ingestion-demo/logs:/app/logs
+      - ./vector-ingestion-demo/output:/app/output
+    command: python scripts/generate_all_logs.py
+
+  # Vector routes logs: all to Snowflake sink, attacks to Splunk sink
+  vector:
+    image: timberio/vector:0.43.1-debian
+    volumes:
+      - ./vector-ingestion-demo/config/vector.toml:/etc/vector/vector.toml:ro
+      - ./vector-ingestion-demo/logs:/app/logs
+      - ./vector-ingestion-demo/output:/app/output
+    ports:
+      - "9598:9598"  # Prometheus metrics
+    depends_on:
+      log-generator:
+        condition: service_completed_successfully
+    working_dir: /app
+
+  # Optional: continuous log streaming (replace log-generator with this)
+  # continuous-generator:
+  #   build: ./vector-ingestion-demo
+  #   volumes:
+  #     - ./vector-ingestion-demo/logs:/app/logs
+  #   command: python scripts/continuous_log_generator.py
+
+  # Optional: real PostgreSQL for live attack simulation
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: demo_app
+  #     POSTGRES_USER: demo
+  #     POSTGRES_PASSWORD: demo
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+
+# volumes:
+#   pgdata:

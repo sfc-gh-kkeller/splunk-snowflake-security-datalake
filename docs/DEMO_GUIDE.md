@@ -379,18 +379,66 @@ If you don't have your own Snowflake:
 
 ---
 
-## Option 3: Native Federated Search (Future)
+## Option 3: Native Federated Search (GA July 2026)
 
-**Splunk Federated Search for Snowflake** was announced by Cisco in September 2025.
+**Splunk Federated Search for Snowflake** was announced by Cisco at Splunk .conf25 (September 2025). It provides a native, first-class integration that replaces the DB Connect/JDBC approach.
 
-- **General Availability**: July 2026
-- **Features**:
-  - Native SPL integration
-  - Automatic query pushdown optimization
-  - Seamless data joining between Splunk and Snowflake
-  - No additional apps required
+- **General Availability**: July 2026 (Splunk Cloud AWS commercial customers)
+- **Announced at**: Splunk .conf25, Boston
+- **Source**: [Cisco Press Release](https://www.splunk.com/en_us/newsroom/press-releases/2025/cisco-advances-open-data-ecosystems-with-splunk-federated-search-for-snowflake.html)
 
-Stay tuned for updates from Splunk documentation.
+### Key Capabilities (vs. DB Connect)
+
+| Capability | DB Connect (Today) | Native Federated Search (July 2026) |
+|------------|-------------------|--------------------------------------|
+| **Setup** | Install DB Connect + JDBC driver, configure JVM, upload JAR | Add Snowflake as a data source in Splunk UI |
+| **Query Syntax** | `\| dbxquery connection="snowflake" query="SQL..."` | SPL-like queries to search Snowflake directly |
+| **Data Joining** | Manual `\| join` / `\| append` with dbxquery | Native cross-platform joins in SPL |
+| **Query Optimization** | Manual — you write the SQL | Automatic pushdown optimization |
+| **Onboarding** | Medium complexity (JDBC, JVM options, Arrow fix) | Seamless — add Snowflake as a provider |
+| **Dependencies** | DB Connect app + Snowflake JDBC driver JAR | No additional apps required |
+
+### Migration Path: DB Connect to Native Federated Search
+
+When the native integration becomes available, existing queries can be migrated. The data model and Snowflake tables remain unchanged — only the Splunk query syntax changes.
+
+**DB Connect (current):**
+```spl
+| dbxquery connection="snowflake" query="SELECT STATUS_CODE, COUNT(*) AS CNT FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY STATUS_CODE ORDER BY CNT DESC"
+```
+
+**Native Federated Search (expected syntax — subject to change):**
+```spl
+| from snowflake:CTF.PUBLIC.ACCESS_LOGS
+| stats count AS CNT by STATUS_CODE
+| sort - CNT
+```
+
+**Hybrid join — DB Connect (current):**
+```spl
+index=main sourcetype=csv
+| stats count as SPLUNK_HITS by src_ip
+| rename src_ip as IP_ADDRESS
+| join type=left IP_ADDRESS [| dbxquery connection="snowflake" query="SELECT IP_ADDRESS, COUNT(*) AS HIST_HITS FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY IP_ADDRESS"]
+```
+
+**Hybrid join — Native Federated Search (expected):**
+```spl
+index=main sourcetype=csv
+| stats count as SPLUNK_HITS by src_ip
+| rename src_ip as IP_ADDRESS
+| join type=left IP_ADDRESS [| from snowflake:CTF.PUBLIC.ACCESS_LOGS | stats count AS HIST_HITS by IP_ADDRESS]
+```
+
+### Recommendation
+
+**Start with DB Connect today.** All the queries, dashboards, and workflows in this repo work now with DB Connect. When Native Federated Search reaches GA:
+
+1. The Snowflake side (tables, data, stages) requires zero changes
+2. Only the Splunk SPL queries need to be updated (SQL strings to SPL syntax)
+3. The pre-built dashboard XML can be adapted by replacing `dbxquery` panels
+
+This repo will be updated with native federated search examples once GA documentation is available.
 
 ---
 

@@ -8,7 +8,7 @@ generating authentic access logs.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 import random
@@ -20,7 +20,7 @@ OUTPUT_DIR = Path(__file__).parent.parent / "logs"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Configure logging to file
-log_file = OUTPUT_DIR / f"webserver_{datetime.utcnow().strftime('%Y%m%d')}.json"
+log_file = OUTPUT_DIR / f"webserver_{datetime.now(timezone.utc).strftime('%Y%m%d')}.json"
 
 
 class JSONLogHandler(BaseHTTPRequestHandler):
@@ -29,7 +29,7 @@ class JSONLogHandler(BaseHTTPRequestHandler):
     def log_request_json(self, status_code: int, bytes_sent: int = 0):
         """Write request to JSON log file."""
         log_entry = {
-            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
             "log_type": "web_access",
             "source": "python_webserver",
             "is_critical": status_code in [401, 403, 500, 502, 503],

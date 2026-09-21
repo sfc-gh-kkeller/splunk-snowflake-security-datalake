@@ -1,6 +1,6 @@
 # Splunk + Snowflake Security Data Lake
 
-A comprehensive reference architecture and demo toolkit for building a **hybrid security data lake** using Snowflake for cost-effective storage/analytics and Splunk for real-time detection — connected via federated search.
+A reference architecture and demo toolkit for building a **hybrid security data lake** using Snowflake for cost-effective storage/analytics and Splunk for real-time detection — connected via federated search.
 
 ## Why This Exists
 
@@ -12,6 +12,8 @@ Traditional SIEM architectures force a trade-off: ingest everything into Splunk 
 | **Real-time Detection** | Full | Critical data subset |
 | **Historical Investigation** | Limited by cost | Years of data |
 | **Compliance/Retention** | Very expensive | Cheap (years) |
+
+Run the [savings calculator](#savings-calculator) with your own volumes to see the exact impact.
 
 ## Architecture
 
@@ -44,6 +46,51 @@ Traditional SIEM architectures force a trade-off: ingest everything into Splunk 
          └───────────────────────────────────────────────┘
 ```
 
+## Quick Start
+
+Choose the path that fits your situation:
+
+### Path A: Pre-built Dataset (5 minutes, recommended for demos)
+
+Load the 100K-row demo dataset into Snowflake and connect Splunk immediately.
+
+```bash
+# Option 1: Using make
+make quickstart
+
+# Option 2: Using snow CLI directly
+snow sql -f data/demo/setup_workbook.sql -c your_connection
+
+# Upload CSVs to stage
+snow stage copy data/demo/access_logs.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/access_logs -c your_connection
+snow stage copy data/demo/asset_inventory.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/asset_inventory -c your_connection
+snow stage copy data/demo/vulnerabilities.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/vulnerabilities -c your_connection
+snow stage copy data/demo/security_findings.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/security_findings -c your_connection
+```
+
+Then import the [pre-built Splunk dashboard](#pre-built-splunk-dashboard) and connect via [DB Connect](docs/DEMO_GUIDE.md).
+
+### Path B: Generate Fresh Data with Pixi (10 minutes)
+
+Generate realistic attack logs and upload them to your own Snowflake tables.
+
+```bash
+cd vector-ingestion-demo
+curl -fsSL https://pixi.sh/install.sh | bash   # install pixi if needed
+cp env.example .env                              # edit with your Snowflake creds
+pixi install
+pixi run quickstart                              # creates tables, generates logs, uploads
+```
+
+### Path C: Docker Demo (5 minutes, no local installs)
+
+Generate attack logs without installing Python or pixi locally. Snowflake upload still uses `snow` CLI.
+
+```bash
+docker compose up                                # generates logs in ./vector-ingestion-demo/output/
+# Then upload the output files to Snowflake using snow CLI or the Snowflake UI
+```
+
 ## What's Included
 
 ### Documentation
@@ -51,114 +98,74 @@ Traditional SIEM architectures force a trade-off: ingest everything into Splunk 
 | Document | Description |
 |----------|-------------|
 | [`docs/ARCHITECTURE_GUIDE.md`](docs/ARCHITECTURE_GUIDE.md) | Full architecture guide — cost analysis, data routing strategies, feature comparison, implementation phases |
-| [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md) | Splunk DB Connect setup — JDBC config, connection setup, troubleshooting |
+| [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md) | Splunk DB Connect setup + Native Federated Search readiness (GA July 2026) |
 | [`docs/DEMO_QUERIES.md`](docs/DEMO_QUERIES.md) | 15+ copy-paste SPL queries — correlations, CTEs, hybrid joins, dashboards, advanced analytics |
+
+### Pre-built Splunk Dashboard
+
+Import [`splunk/dashboards/snowflake_security_lake.xml`](splunk/dashboards/snowflake_security_lake.xml) directly into Splunk:
+
+1. Go to **Settings > User Interface > Dashboards**
+2. Click **Create New Dashboard** > **Source (XML)**
+3. Paste the contents of `snowflake_security_lake.xml`
+
+The dashboard includes: KPI panels, request method distribution, status code breakdown, endpoint risk assessment (CTE), vulnerability severity heatmap, backend server health, security findings, and statistical anomaly detection (Z-scores).
+
+### Savings Calculator
+
+Estimate your cost savings with a personalized report:
+
+```bash
+python3 tools/savings_calculator.py              # interactive prompts
+python3 tools/savings_calculator.py --total 100  # quick: 100 GB/day total
+python3 tools/savings_calculator.py --csv        # export as CSV
+```
+
+### Mock Splunk Demo (No Splunk Required)
+
+Don't have a Splunk instance? Run the mock Splunk UI to show prospects what federated search looks like:
+
+```bash
+make splunk-demo                    # or: streamlit run tools/splunk_demo.py
+```
+
+This launches a Streamlit app with a Splunk-like dark theme that includes:
+- **Dashboard tab** — KPI metrics, charts, and risk tables, all populated by "federated queries"
+- **Search tab** — pick pre-built SPL queries, click Search, watch results come back from Snowflake
+- **Job Inspector** — shows "0 events scanned" proving compute offloading to Snowflake
+- **Dual mode** — works offline with mock data (default), or toggle to live Snowflake queries
 
 ### Vector Ingestion Demo
 
-A working demo that generates realistic security logs with attack patterns and ingests them into Snowflake (and optionally Splunk) via [Vector](https://vector.dev).
+A working demo that generates realistic security logs with attack patterns and routes them via [Vector](https://vector.dev):
 
 ```
 vector-ingestion-demo/
 ├── config/
 │   ├── vector.toml              # Vector routing config (Snowflake + Splunk)
-│   ├── snowflake_setup.sql      # Table creation DDL
+│   ├── snowflake_setup.sql      # Table creation DDL (source of truth)
 │   └── credentials.example.toml # Credential template
 ├── scripts/
+│   ├── snowflake_setup.py       # Create Snowflake tables from SQL file
 │   ├── generate_all_logs.py     # Generate Nginx + PostgreSQL attack logs
-│   ├── postgres_attacks.py      # Simulate database attacks
 │   ├── upload_to_snowflake.py   # Direct CSV upload to Snowflake
 │   ├── simple_web_server.py     # Local web server for live attack sim
 │   └── ...
-├── pixi.toml                    # Dependencies (pixi package manager)
+├── pixi.toml                    # Dependencies and task definitions
+├── Dockerfile                   # For Docker-based demos
 └── env.example                  # Environment variable template
 ```
 
-### Demo Data & Setup
-
-The `data/demo/` directory contains everything needed to recreate the Snowflake tables used by the Splunk federated query demos:
+### Demo Data
 
 | File | Rows | Description |
 |------|------|-------------|
-| [`data/demo/setup_workbook.sql`](data/demo/setup_workbook.sql) | — | Full SQL workbook: DDL, staging, COPY INTO, verification queries |
+| [`data/demo/setup_workbook.sql`](data/demo/setup_workbook.sql) | --- | Full SQL workbook: DDL, staging, COPY INTO, verification |
 | `data/demo/access_logs.csv` | 100,000 | Web access logs with realistic attack patterns |
 | `data/demo/asset_inventory.csv` | 844 | Server/resource catalog (OS, specs, cloud provider) |
 | `data/demo/vulnerabilities.csv` | 15,000 | Vulnerability scan results with severity and status |
 | `data/demo/security_findings.csv` | 106 | Security findings derived from access log anomalies |
-
-**Quick setup:**
-
-```bash
-# 1. Run the SQL workbook to create tables and file format
-snow sql -f data/demo/setup_workbook.sql -c your_connection
-
-# 2. Upload CSVs to the Snowflake stage
-snow stage copy data/demo/access_logs.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/access_logs -c your_connection
-snow stage copy data/demo/asset_inventory.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/asset_inventory -c your_connection
-snow stage copy data/demo/vulnerabilities.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/vulnerabilities -c your_connection
-snow stage copy data/demo/security_findings.csv @CTF.PUBLIC.CTF_UPLOAD_STAGE/security_findings -c your_connection
-
-# 3. Load data (run the COPY INTO section from the workbook)
-```
-
-### Sample Data
-
-| File | Description |
-|------|-------------|
-| `data/sample_web_logs.csv` | 50 realistic web log events with overlapping IPs for correlation demos |
-
-## Quick Start
-
-### 1. Generate Security Logs
-
-```bash
-cd vector-ingestion-demo
-
-# Install pixi (if needed)
-curl -fsSL https://pixi.sh/install.sh | bash
-
-# Install dependencies and generate logs
-pixi install
-pixi run generate-all
-```
-
-This creates CSV/JSON files in `vector-ingestion-demo/logs/` with simulated:
-- **Nginx attacks**: SQL injection, XSS, path traversal, command injection, brute force, recon
-- **PostgreSQL attacks**: Privilege escalation, data exfiltration, timing attacks
-
-### 2. Load Demo Data (Pre-built Dataset)
-
-Use the pre-built demo dataset for immediate Splunk federated query demos:
-
-```bash
-# Run the setup workbook (creates DB, tables, stage)
-snow sql -f data/demo/setup_workbook.sql -c your_connection
-
-# Upload CSVs and load — see data/demo/setup_workbook.sql for full instructions
-```
-
-### 3. Or: Generate Fresh Data + Upload
-
-```bash
-cp vector-ingestion-demo/env.example vector-ingestion-demo/.env
-# Edit .env with your Snowflake credentials
-
-snow sql -f vector-ingestion-demo/config/snowflake_setup.sql
-pixi run upload-csv
-```
-
-### 4. Connect Splunk to Snowflake
-
-See [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md) for full DB Connect setup instructions.
-
-### 5. Run Queries
-
-See [`docs/DEMO_QUERIES.md`](docs/DEMO_QUERIES.md) for 15+ ready-to-use SPL queries demonstrating:
-- Aggregation pushdown (100K rows scanned → 1 row returned)
-- CTE-based threat classification
-- Hybrid correlations (Splunk + Snowflake joins)
-- Statistical anomaly detection (Z-scores via SQL)
-- Dashboard XML
+| `data/sample_web_logs.csv` | 50 | Overlapping IPs for Splunk hybrid correlation demos |
 
 ## Key Findings
 
@@ -192,9 +199,13 @@ See [`docs/DEMO_QUERIES.md`](docs/DEMO_QUERIES.md) for 15+ ready-to-use SPL quer
 
 **Strategy**: Keep 7-30 days in Splunk for real-time detection. Keep 1-5 years in Snowflake for investigations and compliance. Federated search bridges the gap.
 
+Run `python3 tools/savings_calculator.py --total <your_daily_GB>` for a personalized breakdown.
+
 ## Industry Context
 
-Cisco announced **Splunk Federated Search for Snowflake** (GA planned July 2026), providing native integration beyond DB Connect. This repo demonstrates capabilities available today using DB Connect.
+Cisco announced **Splunk Federated Search for Snowflake** at .conf25 (September 2025), with GA planned for July 2026 on Splunk Cloud AWS. This provides native SPL integration beyond DB Connect.
+
+**This repo works today** using DB Connect. When the native integration is GA, only the Splunk query syntax changes — the Snowflake tables and data model remain identical. See [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md) for the migration path.
 
 ## Attack Patterns Simulated
 
@@ -216,8 +227,11 @@ Cisco announced **Splunk Federated Search for Snowflake** (GA planned July 2026)
 ## Requirements
 
 - **Snowflake**: Any edition (Enterprise recommended)
-- **Splunk Cloud**: With DB Connect app installed
-- **Local**: Python 3.11+, [pixi](https://pixi.sh) package manager
+- **Splunk Cloud**: With DB Connect app installed (or Native Federated Search when GA)
+- **Local**: One of:
+  - [pixi](https://pixi.sh) package manager (recommended)
+  - Docker (for zero-install demo)
+  - Python 3.11+ (manual setup)
 - **Optional**: Vector (for continuous ingestion), PostgreSQL (for live attack simulation)
 
 ## License

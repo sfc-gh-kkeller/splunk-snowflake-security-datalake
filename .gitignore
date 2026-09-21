@@ -34,9 +34,6 @@ vector-ingestion-demo/logs/*.log
 vector-ingestion-demo/logs/*.csv
 vector-ingestion-demo/output/
 
-# Pixi lock (platform-specific)
-vector-ingestion-demo/pixi.lock
-
 # IDE
 .idea/
 .vscode/
@@ -47,3 +44,4 @@ vector-ingestion-demo/pixi.lock
 # Temp
 *.tmp
 *.bak
+.snowflake/

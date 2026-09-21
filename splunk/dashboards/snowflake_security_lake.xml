@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Snowflake Security Data Lake Dashboard
+  =======================================
+  Import into Splunk: Settings > User Interface > Dashboards > Create from XML
+  Requires: DB Connect with a connection named "snowflake" pointing to CTF database.
+  Data: 100K row ACCESS_LOGS + ASSET_INVENTORY + VULNERABILITIES + SECURITY_FINDINGS
+-->
+<dashboard version="1.1">
+  <label>Snowflake Security Data Lake</label>
+  <description>Security analytics with compute offloaded to Snowflake (DB Connect federated search)</description>
+
+  <!-- Row 1: KPI Single-Value Panels -->
+  <row>
+    <panel>
+      <title>Total Requests</title>
+      <single>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT COUNT(*) AS TOTAL FROM CTF.PUBLIC.ACCESS_LOGS"</query>
+        </search>
+        <option name="field">TOTAL</option>
+        <option name="underLabel">Snowflake Rows Scanned</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Auth Failures (401)</title>
+      <single>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT COUNT(*) AS CNT FROM CTF.PUBLIC.ACCESS_LOGS WHERE STATUS_CODE = 401"</query>
+        </search>
+        <option name="field">CNT</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[5000,8000]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Server Errors (5xx)</title>
+      <single>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT COUNT(*) AS CNT FROM CTF.PUBLIC.ACCESS_LOGS WHERE STATUS_CODE >= 500"</query>
+        </search>
+        <option name="field">CNT</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[10000,15000]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Open Vulnerabilities</title>
+      <single>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT COUNT(*) AS CNT FROM CTF.PUBLIC.VULNERABILITIES WHERE STATUS = 'OPEN'"</query>
+        </search>
+        <option name="field">CNT</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Row 2: Charts -->
+  <row>
+    <panel>
+      <title>Request Method Distribution</title>
+      <chart>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT REQUEST_METHOD, COUNT(*) AS COUNT FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY REQUEST_METHOD ORDER BY COUNT DESC"</query>
+        </search>
+        <option name="charting.chart">pie</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Status Code Breakdown</title>
+      <chart>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT CAST(STATUS_CODE AS VARCHAR) AS STATUS_CODE, COUNT(*) AS COUNT FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY STATUS_CODE ORDER BY COUNT DESC"</query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.showDataLabels">all</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Row 3: Endpoint Risk Assessment (CTE pushdown) -->
+  <row>
+    <panel>
+      <title>Endpoint Risk Assessment (CTE — runs entirely on Snowflake)</title>
+      <table>
+        <search>
+          <query>| dbxquery connection="snowflake" query="WITH path_analysis AS (SELECT SPLIT_PART(SPLIT_PART(REQUEST_PATH, '/', 2), '/', 1) AS ENDPOINT, COUNT(*) AS REQUESTS, SUM(CASE WHEN STATUS_CODE = 401 THEN 1 ELSE 0 END) AS AUTH_FAILURES, ROUND(100.0 * SUM(CASE WHEN STATUS_CODE >= 400 THEN 1 ELSE 0 END) / COUNT(*), 1) AS ERROR_RATE_PCT FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY 1) SELECT ENDPOINT, REQUESTS, AUTH_FAILURES, ERROR_RATE_PCT, CASE WHEN AUTH_FAILURES > 1000 THEN 'HIGH_RISK' WHEN AUTH_FAILURES > 500 THEN 'MEDIUM_RISK' ELSE 'NORMAL' END AS RISK FROM path_analysis ORDER BY REQUESTS DESC"</query>
+        </search>
+        <option name="drilldown">row</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Row 4: Vulnerability Severity + Backend Health -->
+  <row>
+    <panel>
+      <title>Vulnerability Severity Distribution</title>
+      <chart>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT CASE WHEN SEVERITY >= 9 THEN 'Critical' WHEN SEVERITY >= 7 THEN 'High' WHEN SEVERITY >= 4 THEN 'Medium' ELSE 'Low' END AS SEVERITY_LEVEL, STATUS, COUNT(*) AS COUNT FROM CTF.PUBLIC.VULNERABILITIES GROUP BY SEVERITY_LEVEL, STATUS ORDER BY COUNT DESC"</query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">right</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Top 10 Backend Servers by Error Rate</title>
+      <table>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT BACKEND_IP, COUNT(*) AS TOTAL_HITS, SUM(CASE WHEN STATUS_CODE >= 500 THEN 1 ELSE 0 END) AS SERVER_ERRORS, ROUND(100.0 * SUM(CASE WHEN STATUS_CODE >= 500 THEN 1 ELSE 0 END) / COUNT(*), 1) AS ERROR_RATE_PCT FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY BACKEND_IP HAVING COUNT(*) >= 3 ORDER BY SERVER_ERRORS DESC LIMIT 10"</query>
+        </search>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Row 5: Security Findings -->
+  <row>
+    <panel>
+      <title>Recent Security Findings</title>
+      <table>
+        <search>
+          <query>| dbxquery connection="snowflake" query="SELECT FINDING_TYPE, SEVERITY, STATUS, IP_ADDRESS, DESCRIPTION, DETECTED_AT FROM CTF.PUBLIC.SECURITY_FINDINGS ORDER BY DETECTED_AT DESC LIMIT 25"</query>
+        </search>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Row 6: Statistical Anomaly Detection -->
+  <row>
+    <panel>
+      <title>Anomalous IPs by Request Volume (Z-Score > 2)</title>
+      <table>
+        <search>
+          <query>| dbxquery connection="snowflake" query="WITH stats AS (SELECT IP_ADDRESS, COUNT(*) AS REQUESTS, AVG(COUNT(*)) OVER() AS AVG_REQUESTS, STDDEV(COUNT(*)) OVER() AS STDDEV_REQUESTS FROM CTF.PUBLIC.ACCESS_LOGS GROUP BY IP_ADDRESS) SELECT IP_ADDRESS, REQUESTS, ROUND((REQUESTS - AVG_REQUESTS) / NULLIF(STDDEV_REQUESTS, 0), 2) AS Z_SCORE FROM stats WHERE ABS((REQUESTS - AVG_REQUESTS) / NULLIF(STDDEV_REQUESTS, 0)) > 2 ORDER BY Z_SCORE DESC LIMIT 20"</query>
+        </search>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

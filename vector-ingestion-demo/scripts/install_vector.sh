@@ -3,7 +3,7 @@
 
 set -e
 
-VECTOR_VERSION="0.35.0"
+VECTOR_VERSION="0.43.1"
 INSTALL_DIR="${HOME}/.local/bin"
 
 echo "🚀 Installing Vector v${VECTOR_VERSION}..."

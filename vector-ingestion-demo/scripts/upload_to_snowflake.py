@@ -90,82 +90,28 @@ def connect_snowflake(config):
 
 
 def ensure_tables_exist(conn, config):
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist using the canonical SQL file."""
+    sql_file = Path(__file__).parent.parent / "config" / "snowflake_setup.sql"
+
+    if not sql_file.exists():
+        console.print("[yellow]Warning: config/snowflake_setup.sql not found, skipping table creation[/yellow]")
+        console.print("[yellow]Run 'pixi run create-snowflake-tables' first[/yellow]")
+        return
+
     cursor = conn.cursor()
-    
-    tables_sql = """
-    -- Nginx Access Logs (critical - also goes to Splunk)
-    CREATE TABLE IF NOT EXISTS NGINX_LOGS (
-        timestamp TIMESTAMP_NTZ,
-        client_ip VARCHAR(50),
-        request_method VARCHAR(10),
-        request_path VARCHAR(2000),
-        http_status INTEGER,
-        response_size INTEGER,
-        user_agent VARCHAR(1000),
-        referer VARCHAR(1000),
-        response_time_ms FLOAT,
-        is_attack BOOLEAN,
-        attack_type VARCHAR(100),
-        severity VARCHAR(20),
-        raw_log TEXT,
-        ingested_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-    );
-    
-    -- PostgreSQL Logs (not critical - Snowflake only)
-    CREATE TABLE IF NOT EXISTS POSTGRES_LOGS (
-        log_time TIMESTAMP_NTZ,
-        user_name VARCHAR(100),
-        database_name VARCHAR(100),
-        process_id INTEGER,
-        connection_from VARCHAR(100),
-        session_id VARCHAR(100),
-        session_line_num INTEGER,
-        command_tag VARCHAR(50),
-        session_start_time TIMESTAMP_NTZ,
-        virtual_transaction_id VARCHAR(50),
-        transaction_id BIGINT,
-        error_severity VARCHAR(20),
-        sql_state_code VARCHAR(10),
-        message TEXT,
-        detail TEXT,
-        hint TEXT,
-        internal_query TEXT,
-        internal_query_pos INTEGER,
-        context TEXT,
-        query TEXT,
-        query_pos INTEGER,
-        location TEXT,
-        application_name VARCHAR(200),
-        is_suspicious BOOLEAN,
-        attack_pattern VARCHAR(100),
-        ingested_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-    );
-    
-    -- Combined Security Events (for correlation)
-    CREATE TABLE IF NOT EXISTS SECURITY_EVENTS (
-        event_id VARCHAR(100),
-        event_time TIMESTAMP_NTZ,
-        source_system VARCHAR(50),
-        event_type VARCHAR(100),
-        severity VARCHAR(20),
-        source_ip VARCHAR(50),
-        user_name VARCHAR(100),
-        description TEXT,
-        raw_data VARIANT,
-        ingested_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-    );
-    """
-    
-    for statement in tables_sql.split(";"):
+    sql_text = sql_file.read_text()
+
+    for statement in sql_text.split(";"):
         statement = statement.strip()
-        if statement:
-            try:
-                cursor.execute(statement)
-            except Exception as e:
-                console.print(f"[yellow]Warning: {e}[/yellow]")
-    
-    console.print("[green]✓ Tables verified/created[/green]")
+        lines = [l for l in statement.splitlines() if l.strip() and not l.strip().startswith("--")]
+        if not lines:
+            continue
+        try:
+            cursor.execute(statement)
+        except Exception as e:
+            console.print(f"[yellow]Warning: {e}[/yellow]")
+
+    console.print("[green]Tables verified/created (from config/snowflake_setup.sql)[/green]")
     cursor.close()
 
 

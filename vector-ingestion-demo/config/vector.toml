@@ -76,21 +76,21 @@ source = '''
 type = "remap"
 inputs = ["postgres_csv_logs"]
 source = '''
-# PostgreSQL CSV format parsing
-parts = split(string!(.message), ",")
+# PostgreSQL CSV format parsing — use parse_csv to handle quoted fields
+row = parse_csv!(string!(.message))
 
-.log_time = get(parts, [0]) ?? ""
-.user_name = get(parts, [1]) ?? ""
-.database_name = get(parts, [2]) ?? ""
-.process_id = get(parts, [3]) ?? ""
-.connection_from = get(parts, [4]) ?? ""
-.session_id = get(parts, [5]) ?? ""
-.session_line_num = get(parts, [6]) ?? ""
-.command_tag = get(parts, [7]) ?? ""
-.error_severity = get(parts, [11]) ?? ""
-.message = get(parts, [13]) ?? ""
-.query = get(parts, [18]) ?? ""
-.application_name = get(parts, [22]) ?? ""
+.log_time = get(row, [0]) ?? ""
+.user_name = get(row, [1]) ?? ""
+.database_name = get(row, [2]) ?? ""
+.process_id = get(row, [3]) ?? ""
+.connection_from = get(row, [4]) ?? ""
+.session_id = get(row, [5]) ?? ""
+.session_line_num = get(row, [6]) ?? ""
+.command_tag = get(row, [7]) ?? ""
+.error_severity = get(row, [11]) ?? ""
+.message = get(row, [13]) ?? ""
+.query = get(row, [18]) ?? ""
+.application_name = get(row, [22]) ?? ""
 
 .source_system = "postgresql"
 .log_type = "query"
