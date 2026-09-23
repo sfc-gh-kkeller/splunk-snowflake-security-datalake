@@ -46,6 +46,26 @@ Run the [savings calculator](#savings-calculator) with your own volumes to see t
          └───────────────────────────────────────────────┘
 ```
 
+## Screenshots
+
+The Streamlit-in-Snowflake demo app provides a Splunk-authentic dark-themed UI that runs federated queries against Snowflake tables.
+
+### Dashboard Overview
+![Dashboard Overview](docs/screenshots/dashboard-overview.png)
+KPI metrics (requests, unique IPs, auth failures, server errors, delete operations), request method distribution, and status code breakdown — all powered by live Snowflake queries.
+
+### Search & Investigation
+![Search Results](docs/screenshots/search-results.png)
+SPL search bar with syntax highlighting, timeline visualization, and tabbed results (Statistics, Visualization, Events). Queries execute via `| dbxquery` against Snowflake.
+
+### Dashboard Builder
+![Dashboard Builder](docs/screenshots/dashboard-builder.png)
+Drag-and-drop style dashboard with charts and tables in a 2-column layout. FEDERATED badges indicate data sourced from Snowflake.
+
+### Federated Search Flow
+![Federated Search Flow](docs/screenshots/federated-search-flow.png)
+Side-by-side comparison of DB Connect (available today) vs Native Federated Search (GA July 2026), with alert & response action capabilities.
+
 ## Quick Start
 
 Choose the path that fits your situation:
@@ -121,9 +141,26 @@ python3 tools/savings_calculator.py --total 100  # quick: 100 GB/day total
 python3 tools/savings_calculator.py --csv        # export as CSV
 ```
 
+### Streamlit-in-Snowflake Demo App
+
+A full Splunk-themed demo that runs natively inside Snowflake (Streamlit-in-Snowflake):
+
+```bash
+cd streamlit-app
+snow streamlit deploy --replace --role ACCOUNTADMIN
+```
+
+Features:
+- **Dashboard tab** — KPI metrics, charts, risk tables, and triggered alerts with response actions
+- **Search tab** — SPL search bar with syntax highlighting, timeline, and tabbed results
+- **Dashboard Builder** — multi-panel layout with FEDERATED badges
+- **Federated Search Flow** — step-by-step walkthrough of DB Connect and Native Federated Search
+- **Alert & Response Actions** — email, PagerDuty, Slack, ServiceNow, and SOAR playbook triggers on federated query results
+- **Job Inspector** — shows "0 events scanned" proving compute offloading to Snowflake
+
 ### Mock Splunk Demo (No Splunk Required)
 
-Don't have a Splunk instance? Run the mock Splunk UI to show prospects what federated search looks like:
+Don't have a Splunk instance? Run the local mock Splunk UI:
 
 ```bash
 make splunk-demo                    # or: streamlit run tools/splunk_demo.py
@@ -175,6 +212,7 @@ vector-ingestion-demo/
 |------------|--------|
 | Dashboards & Visualizations | Fully supported |
 | Scheduled Alerts (1-5 min) | Fully supported |
+| Alert Actions (email, webhook, SOAR) | Fully supported |
 | Ad-hoc Threat Hunting | Fully supported |
 | Hybrid Joins (Splunk + Snowflake) | Fully supported |
 | Subsearch Filters | Fully supported |
